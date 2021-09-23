@@ -33,6 +33,13 @@ const item3 = new Item({
 
 const defaultItems = [item1, item2, item3];
 
+const listSchema = new mongoose.Schema({
+  name: String,
+  items: [itemsSchema],
+});
+
+const List = new mongoose.model("List", listSchema);
+
 app.get("/", function (req, res) {
   Item.find({}, function (err, foundItems) {
     if (foundItems.length === 0) {
@@ -50,14 +57,51 @@ app.get("/", function (req, res) {
   });
 });
 
+app.get("/:customListName", function (req, res) {
+  const customListName = req.params.customListName;
+
+  // avoid creating a new list with the same name every time the user tries to access it (Mongoose findOne())
+  List.findOne({ name: customListName }, function (err, foundList) {
+    if (!err) {
+      if (!foundList) {
+        // Create a new list
+        // console.log("Doesn't exist!");
+        const list = new List({
+          name: customListName,
+          items: defaultItems,
+        });
+        list.save();
+        res.redirect("/" + customListName);
+      } else {
+        // Show an existing list
+        // console.log("Exists!!!");
+        res.render("list", {
+          listTitle: foundList.name,
+          newListItems: foundList.items,
+        });
+      }
+    }
+  });
+});
+
 app.post("/", function (req, res) {
   const itemName = req.body.newItem;
+  const listName = req.body.list;
+
   const item = new Item({
     name: itemName,
   });
 
-  item.save();
-  res.redirect("/");
+  if (listName === "Today") {
+    item.save();
+    res.redirect("/");
+  } else {
+    List.findOne({ name: listName }, function (err, foundList) {
+      foundList.items.push(item);
+      foundList.save();
+      res.redirect("/" + listName);
+    });
+  }
 });
 
 app.post("/delete", function (req, res) {
@@ -69,16 +113,6 @@ app.post("/delete", function (req, res) {
     }
     res.redirect("/");
   });
-});
-
-app.get("/work", function (req, res) {
-  res.render("list", { listTitle: "Work List", newListItems: workItems });
-});
-
-app.post("/work", function () {
-  let item = req.body.newItem;
-  workItems.push(item);
-  res.redirect("/work");
 });
 
 app.listen(3000, function () {
